@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+# Built on the Mac that runs it; its Full Disk Access grant is tied to this exact build.
+bin/fda-launch

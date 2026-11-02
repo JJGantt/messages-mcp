@@ -1,0 +1,8 @@
+# The launchd job's .venv (README.md § Requirements).
+# chatdb is installed separately, editable from its own checkout: pip install -e ~/repos/chatdb
+mcp==2.1.1
+pyobjc-framework-Cocoa
+uvicorn
+python-dotenv
+requests
+ops-report @ https://github.com/JJGantt/ops-report/archive/refs/tags/v1.0.0.tar.gz

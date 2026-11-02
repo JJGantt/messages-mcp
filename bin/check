@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Probe the messages server by calling a tool that reads chat.db.
+
+The server can run, authenticate and answer tools/list while unable to open
+chat.db, which is exactly what the launchd job does without Full Disk Access.
+So this calls list_chats on the server registration.py finds and prints `ok`,
+or the error with a non-zero exit.
+
+usage: ~/repos/messages-mcp/bin/check
+"""
+
+import json
+import sys
+import urllib.error
+import urllib.request
+
+from registration import registration
+
+ENDPOINT, AUTH = registration()
+
+
+def rpc(message, session=None):
+    """POST one JSON-RPC message; (parsed reply or None, session id)."""
+    headers = {"Authorization": AUTH, "Content-Type": "application/json",
+               "Accept": "application/json, text/event-stream"}
+    if session:
+        headers["mcp-session-id"] = session
+    request = urllib.request.Request(ENDPOINT, data=json.dumps(message).encode(),
+                                     headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as reply:
+        body = reply.read().decode()
+        session = reply.headers.get("mcp-session-id") or session
+    # A reply is plain JSON or a server-sent event stream, at the server's choice.
+    events = [line[6:] for line in body.splitlines() if line.startswith("data: ")]
+    text = events[-1] if events else body
+    return (json.loads(text) if text.strip() else None), session
+
+
+def main():
+    try:
+        _, session = rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                          "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                                     "clientInfo": {"name": "check", "version": "1"}}})
+        rpc({"jsonrpc": "2.0", "method": "notifications/initialized"}, session)
+        reply, _ = rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                        "params": {"name": "list_chats", "arguments": {"limit": 1}}},
+                       session)
+    except urllib.error.HTTPError as err:
+        sys.exit(f"HTTP {err.code} from {ENDPOINT}: {err.read().decode(errors='replace')}")
+    except urllib.error.URLError as err:
+        sys.exit(f"cannot reach {ENDPOINT}: {err.reason}")
+    result = reply["result"]
+    if result.get("isError"):
+        text = " ".join(c.get("text", "") for c in result.get("content", []))
+        sys.exit(f"list_chats failed: {text}")
+    print("ok")
+
+
+if __name__ == "__main__":
+    main()
